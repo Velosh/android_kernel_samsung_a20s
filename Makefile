@@ -771,6 +771,9 @@ DISABLE_LTO	+= $(DISABLE_CFI)
 export DISABLE_CFI
 endif
 
+# Disable unused-constant-variable warnings
+KBUILD_CFLAGS	+= $(call cc-disable-warning,unused-const-variable,)
+
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS   += -Os
 else
