@@ -274,10 +274,6 @@ quiet_cmd_gzip = GZIP    $@
 cmd_gzip = (cat $(filter-out FORCE,$^) | gzip -n -f -9 > $@) || \
 	(rm -f $@ ; false)
 
-# DTC
-# ---------------------------------------------------------------------------
-DTC ?= $(objtree)/scripts/dtc/dtc
-
 # Disable noisy checks by default
 ifeq ($(KBUILD_ENABLE_EXTRA_GCC_CHECKS),)
 DTC_FLAGS += -Wno-unit_address_vs_reg
@@ -301,11 +297,7 @@ cmd_dt_S_dtb=						\
 $(obj)/%.dtb.S: $(obj)/%.dtb
 	$(call cmd,dt_S_dtb)
 
-ifneq ($(DTC_EXT),)
-DTC = $(DTC_EXT)
-else
-DTC = $(objtree)/scripts/dtc/dtc
-endif
+DTC = $(srctree)/tools/dtc
 
 quiet_cmd_dtc = DTC     $@
 cmd_dtc = mkdir -p $(dir ${dtc-tmp}) ; \
