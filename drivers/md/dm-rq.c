@@ -283,7 +283,7 @@ static void free_rq_clone(struct request *clone)
  * Must be called without clone's queue lock held,
  * see end_clone_request() for more details.
  */
-static void dm_end_request(struct request *clone, int error)
+void dm_end_request(struct request *clone, int error)
 {
 	int rw = rq_data_dir(clone);
 	struct dm_rq_target_io *tio = clone->end_io_data;
@@ -464,7 +464,7 @@ static void dm_complete_request(struct request *rq, int error)
  * Target's rq_end_io() function isn't called.
  * This may be used when the target's map_rq() or clone_and_map_rq() functions fail.
  */
-static void dm_kill_unmapped_request(struct request *rq, int error)
+void dm_kill_unmapped_request(struct request *rq, int error)
 {
 	rq->cmd_flags |= REQ_FAILED;
 	dm_complete_request(rq, error);
@@ -510,6 +510,13 @@ static void dm_dispatch_clone_request(struct request *clone, struct request *rq)
 	if (r)
 		/* must complete clone in terms of original request */
 		dm_complete_request(rq, r);
+}
+
+void dm_dispatch_request(struct request *rq)
+{
+	struct dm_rq_target_io *tio = tio_from_request(rq);
+
+	dm_dispatch_clone_request(tio->clone, rq);
 }
 
 static int dm_rq_bio_constructor(struct bio *bio, struct bio *bio_orig,
@@ -841,8 +848,12 @@ static void dm_old_request_fn(struct request_queue *q)
 		tio = tio_from_request(rq);
 		/* Establish tio->ti before queuing work (map_tio_request) */
 		tio->ti = ti;
-		kthread_queue_work(&md->kworker, &tio->work);
+		spin_unlock(q->queue_lock);
+		if (map_request(tio) == DM_MAPIO_REQUEUE)
+			dm_requeue_original_request(tio, false);
+
 		BUG_ON(!irqs_disabled());
+		spin_lock(q->queue_lock);
 	}
 }
 
@@ -854,6 +865,13 @@ int dm_old_init_request_queue(struct mapped_device *md)
 	/* Fully initialize the queue */
 	if (!blk_init_allocated_queue(md->queue, dm_old_request_fn, NULL))
 		return -EINVAL;
+
+#ifdef CONFIG_IOSCHED_NOOP
+	if (elevator_change(md->queue, "noop")) {
+		DMWARN("failed to swith noop-io scheduler for %s", 
+			dm_device_name(md));
+	}
+#endif
 
 	/* disable dm_old_request_fn's merge heuristic by default */
 	md->seq_rq_merge_deadline_usecs = 0;

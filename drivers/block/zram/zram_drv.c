@@ -35,12 +35,15 @@
 
 #include "zram_drv.h"
 
+/* Total bytes used by the compressed storage */
+static u64 zram_pool_total_size;
+
 static DEFINE_IDR(zram_index_idr);
 /* idr index must be protected */
 static DEFINE_MUTEX(zram_index_mutex);
 
 static int zram_major;
-static const char *default_compressor = "lzo";
+static const char *default_compressor = "lz4";
 
 /* Module params (documentation at end) */
 static unsigned int num_devices = 1;
@@ -1390,19 +1393,21 @@ compress_again:
 				__GFP_KSWAPD_RECLAIM |
 				__GFP_NOWARN |
 				__GFP_HIGHMEM |
-				__GFP_MOVABLE);
+				__GFP_MOVABLE |
+				__GFP_CMA);
 	if (!handle) {
 		zcomp_stream_put(zram->comp);
 		atomic64_inc(&zram->stats.writestall);
 		handle = zs_malloc(zram->mem_pool, comp_len,
 				GFP_NOIO | __GFP_HIGHMEM |
-				__GFP_MOVABLE);
+				__GFP_MOVABLE | __GFP_CMA);
 		if (handle)
 			goto compress_again;
 		return -ENOMEM;
 	}
 
 	alloced_pages = zs_get_total_pages(zram->mem_pool);
+	zram_pool_total_size = alloced_pages << PAGE_SHIFT;
 	update_used_max(zram, alloced_pages);
 
 	if (zram->limit_pages && alloced_pages > zram->limit_pages) {
@@ -1943,6 +1948,7 @@ static int zram_add(void)
 	zram->disk->private_data = zram;
 	snprintf(zram->disk->disk_name, 16, "zram%d", device_id);
 
+	__set_bit(QUEUE_FLAG_FAST, &zram->disk->queue->queue_flags);
 	/* Actual capacity set using syfs (/sys/block/zram<id>/disksize */
 	set_capacity(zram->disk, 0);
 	/* zram devices sort of resembles non-rotational disks */
@@ -1974,7 +1980,7 @@ static int zram_add(void)
 		zram->disk->queue->limits.discard_zeroes_data = 0;
 	queue_flag_set_unlocked(QUEUE_FLAG_DISCARD, zram->disk->queue);
 
-	zram->disk->queue->backing_dev_info.capabilities |=
+	zram->disk->queue->backing_dev_info->capabilities |=
 					BDI_CAP_STABLE_WRITES;
 
 	disk_to_dev(zram->disk)->groups = zram_disk_attr_groups;
@@ -2108,6 +2114,25 @@ static void destroy_devices(void)
 	unregister_blkdev(zram_major, "zram");
 }
 
+static int zram_size_notifier(struct notifier_block *nb,
+			       unsigned long action, void *data)
+{
+	struct seq_file *s;
+
+	s = (struct seq_file *)data;
+	if (s)
+		seq_printf(s, "ZramDevice:     %8lu kB\n",
+			(unsigned long)zram_pool_total_size >> 10);
+	else
+		pr_cont("ZramDevice:%lukB ",
+			(unsigned long)zram_pool_total_size >> 10);
+	return 0;
+}
+
+static struct notifier_block zram_size_nb = {
+	.notifier_call = zram_size_notifier,
+};
+
 static int __init zram_init(void)
 {
 	int ret;
@@ -2135,6 +2160,7 @@ static int __init zram_init(void)
 		num_devices--;
 	}
 
+	show_mem_extra_notifier_register(&zram_size_nb);
 	return 0;
 
 out_error:

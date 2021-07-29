@@ -14,6 +14,12 @@ config ASHMEM
 	  It is, in theory, a good memory allocator for low-memory devices,
 	  because it can discard shared memory units when under memory pressure.
 
+config SAMSUNG_LMKD_DEBUG
+	bool "record lmkd kill history"
+	default y
+	help
+	  record lmkd kill history
+
 config ANDROID_LOW_MEMORY_KILLER
 	bool "Android Low Memory Killer"
 	---help---
@@ -41,6 +47,17 @@ config ANDROID_VSOC
 	  This option adds support for the Virtual SoC driver needed to boot
 	  a 'cuttlefish' Android image inside QEmu. The driver interacts with
 	  a QEmu ivshmem device. If built as a module, it will be called vsoc.
+
+config ANDROID_LMK_NOTIFY_TRIGGER
+	bool "Android Low Memory Killer Notify Trigger"
+	depends on ANDROID_LOW_MEMORY_KILLER
+	default n
+	---help---
+	Create node "/sys/kernel/mm/lowmemkiller/notify_trigger_active",
+	on which an userspace application can poll for notification when
+	the number of free physical memory pages in the system falls below
+	a set threshold. The threshold is set by the new module parameter
+	"/sys/module/lowmemorykiller/parameters/notify_trigger".
 
 source "drivers/staging/android/ion/Kconfig"
 

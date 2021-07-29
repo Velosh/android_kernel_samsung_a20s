@@ -28,6 +28,18 @@ enum mapping_flags {
 	AS_NO_WRITEBACK_TAGS = 5,
 };
 
+/*
+ * The page cache can be done in larger chunks than
+ * one page, because it allows for more efficient
+ * throughput (it can then be mapped into user
+ * space in smaller chunks for same flexibility).
+ *
+ * Or rather, it _will_ be done in larger chunks.
+ */
+#define PAGE_CACHE_SHIFT	PAGE_SHIFT
+#define PAGE_CACHE_SIZE		PAGE_SIZE
+#define PAGE_CACHE_MASK		PAGE_MASK
+
 static inline void mapping_set_error(struct address_space *mapping, int error)
 {
 	if (unlikely(error)) {
@@ -436,8 +448,8 @@ static inline pgoff_t linear_page_index(struct vm_area_struct *vma,
 	pgoff_t pgoff;
 	if (unlikely(is_vm_hugetlb_page(vma)))
 		return linear_hugepage_index(vma, address);
-	pgoff = (address - vma->vm_start) >> PAGE_SHIFT;
-	pgoff += vma->vm_pgoff;
+	pgoff = (address - READ_ONCE(vma->vm_start)) >> PAGE_SHIFT;
+	pgoff += READ_ONCE(vma->vm_pgoff);
 	return pgoff;
 }
 

@@ -69,6 +69,12 @@
 
 #include "audit.h"
 
+// [ SEC_SELINUX_PORTING_QUALCOMM
+#ifdef CONFIG_PROC_AVC
+#include <linux/proc_avc.h>
+#endif
+// ] SEC_SELINUX_PORTING_QUALCOMM
+
 /* No auditing will take place until audit_initialized == AUDIT_INITIALIZED.
  * (Initialization happens after skb_init is called.) */
 #define AUDIT_DISABLED		-1
@@ -79,13 +85,19 @@ static int	audit_initialized;
 #define AUDIT_OFF	0
 #define AUDIT_ON	1
 #define AUDIT_LOCKED	2
-u32		audit_enabled = AUDIT_OFF;
-u32		audit_ever_enabled = !!AUDIT_OFF;
+/* Default state when kernel boots without any parameters. */
+// [ SEC_SELINUX_PORTING_COMMON
+u32		audit_enabled = AUDIT_ON;
+u32		audit_ever_enabled = !!AUDIT_ON;
+// ] SEC_SELINUX_PORTING_COMMON
 
 EXPORT_SYMBOL_GPL(audit_enabled);
 
 /* Default state when kernel boots without any parameters. */
-static u32	audit_default = AUDIT_OFF;
+// [ SEC_SELINUX_PORTING_COMMON
+// Samsung Change Value from AUDIT_OFF to AUDIT_ON
+static u32	audit_default = AUDIT_ON;
+// ] SEC_SELINUX_PORTING_COMMON
 
 /* If auditing cannot proceed, audit_failure selects what happens. */
 static u32	audit_failure = AUDIT_FAIL_PRINTK;
@@ -125,6 +137,7 @@ u32		audit_sig_sid = 0;
 static atomic_t    audit_lost = ATOMIC_INIT(0);
 
 /* The netlink socket. */
+static DEFINE_MUTEX(audit_sock_mutex);
 static struct sock *audit_sock;
 static int audit_net_id;
 
@@ -392,12 +405,19 @@ static void audit_printk_skb(struct sk_buff *skb)
 	struct nlmsghdr *nlh = nlmsg_hdr(skb);
 	char *data = nlmsg_data(nlh);
 
+// [ SEC_SELINUX_PORTING_QUALCOMM
+#ifdef CONFIG_PROC_AVC
+	if (nlh->nlmsg_type != AUDIT_EOE && nlh->nlmsg_type != AUDIT_NETFILTER_CFG)
+		sec_avc_log("%s\n", data);
+#else
 	if (nlh->nlmsg_type != AUDIT_EOE) {
 		if (printk_ratelimit())
 			pr_notice("type=%d %s\n", nlh->nlmsg_type, data);
 		else
 			audit_log_lost("printk limit exceeded");
 	}
+#endif
+// ] SEC_SELINUX_PORTING_QUALCOMM
 
 	audit_hold_skb(skb);
 }
@@ -411,7 +431,9 @@ static void kauditd_send_skb(struct sk_buff *skb)
 restart:
 	/* take a reference in case we can't send it and we want to hold it */
 	skb_get(skb);
+	mutex_lock(&audit_sock_mutex);
 	err = netlink_unicast(audit_sock, skb, audit_nlk_portid, 0);
+	mutex_unlock(&audit_sock_mutex);
 	if (err < 0) {
 		pr_err("netlink_unicast sending to audit_pid=%d returned error: %d\n",
 		       audit_pid, err);
@@ -423,7 +445,9 @@ restart:
 				snprintf(s, sizeof(s), "audit_pid=%d reset", audit_pid);
 				audit_log_lost(s);
 				audit_pid = 0;
+				mutex_lock(&audit_sock_mutex);
 				audit_sock = NULL;
+				mutex_unlock(&audit_sock_mutex);
 			} else {
 				pr_warn("re-scheduling(#%d) write to audit_pid=%d\n",
 					attempts, audit_pid);
@@ -434,9 +458,20 @@ restart:
 		}
 		/* we might get lucky and get this in the next auditd */
 		audit_hold_skb(skb);
-	} else
+	} else {
+// [ SEC_SELINUX_PORTING_QUALCOMM
+#ifdef CONFIG_PROC_AVC
+		struct nlmsghdr *nlh = nlmsg_hdr(skb);
+		char *data = nlmsg_data(nlh);
+
+		if (nlh->nlmsg_type != AUDIT_EOE && nlh->nlmsg_type != AUDIT_NETFILTER_CFG)
+			sec_avc_log("%s\n", data);
+#endif
+// ] SEC_SELINUX_PORTING_QUALCOMM
+
 		/* drop the extra reference if sent ok */
 		consume_skb(skb);
+	}
 }
 
 /*
@@ -490,18 +525,20 @@ static void flush_hold_queue(void)
 {
 	struct sk_buff *skb;
 
-	if (!audit_default || !audit_pid)
+// [ SEC_SELINUX_PORTING_COMMON
+	if (!audit_default || !audit_pid || !audit_sock)
 		return;
-
+// ] SEC_SELINUX_PORTING_COMMON
 	skb = skb_dequeue(&audit_skb_hold_queue);
 	if (likely(!skb))
 		return;
 
-	while (skb && audit_pid) {
+// [ SEC_SELINUX_PORTING_COMMON
+	while (skb && audit_pid && audit_sock) {
 		kauditd_send_skb(skb);
 		skb = skb_dequeue(&audit_skb_hold_queue);
 	}
-
+// ] SEC_SELINUX_PORTING_COMMON
 	/*
 	 * if auditd just disappeared but we
 	 * dequeued an skb we need to drop ref
@@ -523,8 +560,10 @@ static int kauditd_thread(void *dummy)
 			if (!audit_backlog_limit ||
 			    (skb_queue_len(&audit_skb_queue) <= audit_backlog_limit))
 				wake_up(&audit_backlog_wait);
-			if (audit_pid)
+// [ SEC_SELINUX_PORTING_COMMON
+			if (audit_pid && audit_sock)
 				kauditd_send_skb(skb);
+// ] SEC_SELINUX_PORTING_COMMON
 			else
 				audit_printk_skb(skb);
 			continue;
@@ -809,12 +848,16 @@ static int audit_set_feature(struct audit_features *uaf)
 
 static int audit_replace(pid_t pid)
 {
+	int	len;
 	struct sk_buff *skb = audit_make_reply(0, 0, AUDIT_REPLACE, 0, 0,
 					       &pid, sizeof(pid));
 
 	if (!skb)
 		return -ENOMEM;
-	return netlink_unicast(audit_sock, skb, audit_nlk_portid, 0);
+	mutex_lock(&audit_sock_mutex);
+	len = netlink_unicast(audit_sock, skb, audit_nlk_portid, 0);
+	mutex_unlock(&audit_sock_mutex);
+	return len;
 }
 
 static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
@@ -899,9 +942,11 @@ static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 			}
 			if (audit_enabled != AUDIT_OFF)
 				audit_log_config_change("audit_pid", new_pid, audit_pid, 1);
+			mutex_lock(&audit_sock_mutex);
 			audit_pid = new_pid;
 			audit_nlk_portid = NETLINK_CB(skb).portid;
 			audit_sock = skb->sk;
+			mutex_unlock(&audit_sock_mutex);
 		}
 		if (s.mask & AUDIT_STATUS_RATE_LIMIT) {
 			err = audit_set_rate_limit(s.rate_limit);
@@ -1174,10 +1219,12 @@ static void __net_exit audit_net_exit(struct net *net)
 {
 	struct audit_net *aunet = net_generic(net, audit_net_id);
 	struct sock *sock = aunet->nlsk;
+	mutex_lock(&audit_sock_mutex);
 	if (sock == audit_sock) {
 		audit_pid = 0;
 		audit_sock = NULL;
 	}
+	mutex_unlock(&audit_sock_mutex);
 
 	RCU_INIT_POINTER(aunet->nlsk, NULL);
 	synchronize_net();

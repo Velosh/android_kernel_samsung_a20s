@@ -1,7 +1,7 @@
 /*
  * Device tree based initialization code for reserved memory.
  *
- * Copyright (c) 2013, 2015 The Linux Foundation. All Rights Reserved.
+ * Copyright (c) 2013, 2015, 2017 The Linux Foundation. All Rights Reserved.
  * Copyright (c) 2013,2014 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
  * Author: Marek Szyprowski <m.szyprowski@samsung.com>
@@ -24,8 +24,9 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/sort.h>
 #include <linux/slab.h>
+#include <linux/kmemleak.h>
 
-#define MAX_RESERVED_REGIONS	16
+#define MAX_RESERVED_REGIONS	32
 static struct reserved_mem reserved_mem[MAX_RESERVED_REGIONS];
 static int reserved_mem_count;
 
@@ -54,8 +55,10 @@ int __init __weak early_init_dt_alloc_reserved_memory_arch(phys_addr_t size,
 	}
 
 	*res_base = base;
-	if (nomap)
+	if (nomap) {
+		kmemleak_ignore_phys(base);
 		return memblock_remove(base, size);
+	}
 	return 0;
 }
 #else
@@ -269,6 +272,7 @@ void __init fdt_init_reserved_mem(void)
 		int len;
 		const __be32 *prop;
 		int err = 0;
+		bool nomap;
 
 		prop = of_get_flat_dt_prop(node, "phandle", &len);
 		if (!prop)
@@ -279,8 +283,13 @@ void __init fdt_init_reserved_mem(void)
 		if (rmem->size == 0)
 			err = __reserved_mem_alloc_size(node, rmem->name,
 						 &rmem->base, &rmem->size);
-		if (err == 0)
+		if (err == 0) {
 			__reserved_mem_init_node(rmem);
+			nomap = of_get_flat_dt_prop(node, "no-map", NULL) != NULL;
+			record_memsize_reserved(rmem->name, rmem->base,
+						rmem->size, nomap,
+						rmem->reusable);
+		}
 	}
 }
 

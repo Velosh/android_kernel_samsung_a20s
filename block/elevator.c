@@ -425,7 +425,10 @@ int elv_merge(struct request_queue *q, struct request **req, struct bio *bio)
 	/*
 	 * First try one-hit cache.
 	 */
-	if (q->last_merge && elv_bio_merge_ok(q->last_merge, bio)) {
+	if (q->last_merge) {
+		if (!elv_bio_merge_ok(q->last_merge, bio))
+			return ELEVATOR_NO_MERGE;
+
 		ret = blk_try_merge(q->last_merge, bio);
 		if (ret != ELEVATOR_NO_MERGE) {
 			*req = q->last_merge;
@@ -735,6 +738,8 @@ void elv_completed_request(struct request_queue *q, struct request *rq)
 	 */
 	if (blk_account_rq(rq)) {
 		q->in_flight[rq_is_sync(rq)]--;
+		if (!queue_in_flight(q))
+			q->in_flight_time += ktime_us_delta(ktime_get(), q->in_flight_stamp);
 		if ((rq->cmd_flags & REQ_SORTED) &&
 		    e->type->ops.elevator_completed_req_fn)
 			e->type->ops.elevator_completed_req_fn(q, rq);

@@ -336,6 +336,8 @@
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
 
+#define KEY_RECENT   254
+
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
 #define BTN_MISC		0x100
@@ -395,6 +397,7 @@
 #define BTN_MODE		0x13c
 #define BTN_THUMBL		0x13d
 #define BTN_THUMBR		0x13e
+#define BTN_GAME		0x13f
 
 #define BTN_DIGI		0x140
 #define BTN_TOOL_PEN		0x140
@@ -642,6 +645,8 @@
  */
 #define KEY_DATA			0x277
 
+#define KEY_DEX_ON			0x2bd
+
 #define BTN_TRIGGER_HAPPY		0x2c0
 #define BTN_TRIGGER_HAPPY1		0x2c0
 #define BTN_TRIGGER_HAPPY2		0x2c1
@@ -683,6 +688,18 @@
 #define BTN_TRIGGER_HAPPY38		0x2e5
 #define BTN_TRIGGER_HAPPY39		0x2e6
 #define BTN_TRIGGER_HAPPY40		0x2e7
+
+#define BTN_HOTKEY_APP1 		0x2f5
+#define BTN_HOTKEY_APP2 		0x2f6
+#define BTN_HOTKEY_APP3 		0x2f7
+
+/* Custom fingerprint gestures keys */
+#define KEY_FP_GESTURE_UP		0x2e8
+#define KEY_FP_GESTURE_DOWN		0x2e9
+#define KEY_FP_GESTURE_LEFT		0x2ea
+#define KEY_FP_GESTURE_RIGHT		0x2eb
+#define KEY_FP_GESTURE_LONG_PRESS	0x2ec
+#define KEY_FP_GESTURE_TAP		0x2ed
 
 /* We avoid low common keys in module aliases so they don't get huge. */
 #define KEY_MIN_INTERESTING	KEY_MUTE
@@ -790,7 +807,11 @@
 #define SW_LINEIN_INSERT	0x0d  /* set = inserted */
 #define SW_MUTE_DEVICE		0x0e  /* set = device disabled */
 #define SW_PEN_INSERTED		0x0f  /* set = pen inserted */
-#define SW_MAX			0x0f
+#define SW_HPHL_OVERCURRENT	0x10  /* set = over current on left hph */
+#define SW_HPHR_OVERCURRENT	0x11  /* set = over current on right hph */
+#define SW_MICROPHONE2_INSERT   0x12  /* set = inserted */
+#define SW_UNSUPPORT_INSERT	0x13  /* set = unsupported device inserted */
+#define SW_MAX			0x20
 #define SW_CNT			(SW_MAX+1)
 
 /*

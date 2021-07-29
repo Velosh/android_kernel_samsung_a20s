@@ -24,6 +24,13 @@
 #include <linux/workqueue.h>
 #include <linux/kref.h>
 #include <linux/xattr.h>
+#include <linux/freezer.h>
+
+#ifdef CONFIG_FUSE_SUPPORT_STLOG
+#include <linux/fslog.h>
+#else
+#define ST_LOG(fmt, ...)
+#endif
 
 /** Max number of pages that can be used in a single read request */
 #define FUSE_MAX_PAGES_PER_REQ 32
@@ -115,6 +122,8 @@ enum {
 	FUSE_I_INIT_RDPLUS,
 	/** An operation changing file size is in progress  */
 	FUSE_I_SIZE_UNSTABLE,
+	/** Can be filled in by open, to use direct I/O on this file. */
+	FUSE_I_ATTR_FORCE_SYNC,
 };
 
 struct fuse_conn;
@@ -153,6 +162,10 @@ struct fuse_file {
 
 	/** Has flock been performed on this file? */
 	bool flock:1;
+
+	/* the read write file */
+	struct file *passthrough_filp;
+	bool passthrough_enabled;
 };
 
 /** One input argument of a request */
@@ -232,6 +245,7 @@ struct fuse_args {
 		unsigned argvar:1;
 		unsigned numargs;
 		struct fuse_arg args[2];
+		struct file *passthrough_filp;
 	} out;
 };
 
@@ -382,6 +396,9 @@ struct fuse_req {
 
 	/** Request is stolen from fuse_file->reserved_req */
 	struct file *stolen_file;
+
+	/** fuse passthrough file  */
+	struct file *passthrough_filp;
 };
 
 struct fuse_iqueue {
@@ -541,6 +558,9 @@ struct fuse_conn {
 
 	/** handle fs handles killing suid/sgid/cap on write/chown/trunc */
 	unsigned handle_killpriv:1;
+
+	/** passthrough IO. */
+	unsigned passthrough:1;
 
 	/*
 	 * The following bitfields are only for optimization purposes
@@ -988,5 +1008,49 @@ extern const struct xattr_handler *fuse_acl_xattr_handlers[];
 struct posix_acl;
 struct posix_acl *fuse_get_acl(struct inode *inode, int type);
 int fuse_set_acl(struct inode *inode, struct posix_acl *acl, int type);
+
+#ifdef CONFIG_FREEZER
+static inline void fuse_freezer_do_not_count(void)
+{
+	current->flags |= PF_FREEZER_SKIP;
+}
+
+static inline void fuse_freezer_count(void)
+{
+	current->flags &= ~PF_FREEZER_SKIP;
+}
+#else /* !CONFIG_FREEZER */
+static inline void fuse_freezer_do_not_count(void) {}
+static inline void fuse_freezer_count(void) {}
+#endif
+
+#define fuse_wait_event(wq, condition)						\
+({										\
+	fuse_freezer_do_not_count();						\
+	wait_event(wq, condition);						\
+	fuse_freezer_count();							\
+})
+
+#define fuse_wait_event_killable(wq, condition)					\
+({										\
+	int __ret = 0;								\
+										\
+	fuse_freezer_do_not_count();						\
+	__ret = wait_event_killable(wq, condition);				\
+	fuse_freezer_count();							\
+										\
+	__ret;									\
+})
+
+#define fuse_wait_event_killable_exclusive(wq, condition)			\
+({										\
+	int __ret = 0;								\
+										\
+	fuse_freezer_do_not_count();						\
+	__ret = wait_event_killable_exclusive(wq, condition);			\
+	fuse_freezer_count();							\
+										\
+	__ret;									\
+})
 
 #endif /* _FS_FUSE_I_H */
