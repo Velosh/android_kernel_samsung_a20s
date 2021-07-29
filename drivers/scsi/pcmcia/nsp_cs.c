@@ -45,7 +45,7 @@
 #include <scsi/scsi_host.h>
 
 #include <scsi/scsi.h>
-#include <scsi/scsi_ioctl.h>
+#include <uapi/scsi/scsi_ioctl.h>
 
 #include <pcmcia/cistpl.h>
 #include <pcmcia/cisreg.h>

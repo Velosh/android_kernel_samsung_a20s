@@ -32,7 +32,7 @@
 #include <linux/mutex.h>
 #include <linux/scatterlist.h>
 
-#include <scsi/scsi_ioctl.h>
+#include <uapi/scsi/scsi_ioctl.h>
 
 #include <asm/byteorder.h>
 #include <linux/uaccess.h>

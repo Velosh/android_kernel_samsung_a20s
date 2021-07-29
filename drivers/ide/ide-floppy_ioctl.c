@@ -9,7 +9,7 @@
 
 #include <asm/unaligned.h>
 
-#include <scsi/scsi_ioctl.h>
+#include <uapi/scsi/scsi_ioctl.h>
 
 #include "ide-floppy.h"
 

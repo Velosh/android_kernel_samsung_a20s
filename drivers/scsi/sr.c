@@ -55,7 +55,7 @@
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_eh.h>
 #include <scsi/scsi_host.h>
-#include <scsi/scsi_ioctl.h>	/* For the door lock/unlock commands */
+#include <uapi/scsi/scsi_ioctl.h>	/* For the door lock/unlock commands */
 
 #include "scsi_logging.h"
 #include "sr.h"

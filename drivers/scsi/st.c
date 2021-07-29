@@ -50,7 +50,7 @@ static const char *verstr = "20160209";
 #include <scsi/scsi_driver.h>
 #include <scsi/scsi_eh.h>
 #include <scsi/scsi_host.h>
-#include <scsi/scsi_ioctl.h>
+#include <uapi/scsi/scsi_ioctl.h>
 #include <scsi/sg.h>
 
 

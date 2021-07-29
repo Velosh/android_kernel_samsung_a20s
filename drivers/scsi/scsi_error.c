@@ -36,7 +36,7 @@
 #include <scsi/scsi_common.h>
 #include <scsi/scsi_transport.h>
 #include <scsi/scsi_host.h>
-#include <scsi/scsi_ioctl.h>
+#include <uapi/scsi/scsi_ioctl.h>
 #include <scsi/scsi_dh.h>
 #include <scsi/sg.h>
 

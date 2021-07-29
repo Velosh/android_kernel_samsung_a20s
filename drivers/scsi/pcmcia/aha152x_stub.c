@@ -43,7 +43,7 @@
 #include <scsi/scsi.h>
 #include <linux/major.h>
 #include <linux/blkdev.h>
-#include <scsi/scsi_ioctl.h>
+#include <uapi/scsi/scsi_ioctl.h>
 
 #include "scsi.h"
 #include <scsi/scsi_host.h>

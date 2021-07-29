@@ -63,7 +63,7 @@
 #include <linux/slab.h>
 #include <linux/backing-dev.h>
 #include <scsi/scsi_cmnd.h>
-#include <scsi/scsi_ioctl.h>
+#include <uapi/scsi/scsi_ioctl.h>
 #include <scsi/scsi.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
